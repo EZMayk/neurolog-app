@@ -12,8 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useToast } from '@/components/ui/use-toast'
-import { 
-  Settings, 
+import {  
   User, 
   Bell, 
   Shield, 
@@ -30,10 +29,16 @@ export default function SettingsPage() {
   const { toast } = useToast()
   
   // ✅ Estado del perfil inicializado correctamente desde el usuario
-  const [profileData, setProfileData] = useState({
+  type UserRole = 'parent' | 'teacher' | 'specialist' | 'admin';
+
+  const [profileData, setProfileData] = useState<{
+    full_name: string;
+    email: string;
+    role: UserRole;
+  }>({
     full_name: '',
     email: '',
-    role: 'parent' as const
+    role: 'parent'
   })
 
   const [preferences, setPreferences] = useState({
@@ -161,17 +166,12 @@ export default function SettingsPage() {
     )
   }
 
-  // Extract user role label to avoid nested ternary in JSX
+  // Extraer etiqueta de rol de usuario a una variable
   let userRoleLabel = 'Usuario';
-  if (user.role === 'parent') {
-    userRoleLabel = 'Padre/Madre';
-  } else if (user.role === 'teacher') {
-    userRoleLabel = 'Docente';
-  } else if (user.role === 'specialist') {
-    userRoleLabel = 'Especialista';
-  } else if (user.role === 'admin') {
-    userRoleLabel = 'Administrador';
-  }
+  if (user.role === 'parent') userRoleLabel = 'Padre/Madre';
+  else if (user.role === 'teacher') userRoleLabel = 'Docente';
+  else if (user.role === 'specialist') userRoleLabel = 'Especialista';
+  else if (user.role === 'admin') userRoleLabel = 'Administrador';
 
   return (
     <div className="space-y-6">
