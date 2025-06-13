@@ -101,7 +101,6 @@ CREATE TABLE children (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-
 -- TABLA: user_child_relations (relaciones usuario-niño)
 CREATE TABLE user_child_relations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -213,22 +212,20 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Función para crear perfil automáticamente cuando se registra usuario
--- Ejemplo de trigger típico (revisa si el tuyo es similar)
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS trigger AS $$
+RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name, role, created_at, updated_at)
+  INSERT INTO profiles (id, email, full_name, role)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'parent'),
-    NOW(),
-    NOW()
+    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'parent')
   );
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ================================================================
 -- 5. CREAR TRIGGERS
 -- ================================================================

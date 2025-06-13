@@ -22,7 +22,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/components/providers/AuthProvider';
 import { useChildren } from '@/hooks/use-children';
 import { useLogs } from '@/hooks/use-logs';
 import type { 
@@ -55,7 +54,7 @@ export default function ChildDetailPage() {
   const params = useParams();
   const router = useRouter();
   const childId = params.id as string;
-  useAuth();
+
   const { loading: childLoading, getChildById } = useChildren();
   const { logs } = useLogs({ childId });
   
@@ -65,7 +64,7 @@ export default function ChildDetailPage() {
   useEffect(() => {
     if (childId && !childLoading) {
       const foundChild = getChildById(childId);
-      setChild(foundChild || null);
+      setChild(foundChild ?? null);
     }
   }, [childId, childLoading, getChildById]);
 
@@ -515,7 +514,7 @@ export default function ChildDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/*  Implementar configuración específica */}
+              {/* TODO: Implementar configuración específica */}
               <p className="text-gray-500">Configuración específica próximamente...</p>
             </CardContent>
           </Card>
