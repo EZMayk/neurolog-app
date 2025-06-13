@@ -212,20 +212,22 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Función para crear perfil automáticamente cuando se registra usuario
+-- Ejemplo de trigger típico (revisa si el tuyo es similar)
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS trigger AS $$
 BEGIN
-  INSERT INTO profiles (id, email, full_name, role)
+  INSERT INTO public.profiles (id, email, full_name, role, created_at, updated_at)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'parent')
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'parent'),
+    NOW(),
+    NOW()
   );
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- ================================================================
 -- 5. CREAR TRIGGERS
 -- ================================================================
