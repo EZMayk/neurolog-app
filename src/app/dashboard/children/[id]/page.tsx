@@ -55,7 +55,7 @@ export default function ChildDetailPage() {
   const params = useParams();
   const router = useRouter();
   const childId = params.id as string;
-  const { user } = useAuth();
+  const { } = useAuth();
   const { loading: childLoading, getChildById } = useChildren();
   const { logs } = useLogs({ childId });
   

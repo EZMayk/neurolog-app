@@ -29,8 +29,9 @@ interface ChildCardProps {
   child: ChildWithRelation
 }
 
-export function ChildCard({ child }: ChildCardProps) {
+export function ChildCard({ child }: Readonly<ChildCardProps>) {
   const [isEditOpen, setIsEditOpen] = useState(false)
+
 
   const age = child.birth_date 
     ? differenceInYears(new Date(), new Date(child.birth_date))

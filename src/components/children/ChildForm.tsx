@@ -509,7 +509,7 @@ function EducationalInfoForm({ educationalInfo, onChange }: EducationalInfoFormP
   );
 }
 
-function PrivacySettingsForm({ settings, onChange }: PrivacySettingsFormProps) {
+function PrivacySettingsForm({ settings, onChange }: Readonly<PrivacySettingsFormProps>) {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -597,11 +597,11 @@ export default function ChildForm({ child, mode, onSuccess, onCancel }: ChildFor
   const form = useForm<ChildFormData>({
     resolver: zodResolver(childFormSchema),
     defaultValues: {
-      name: child?.name || '',
-      birth_date: child?.birth_date || '',
-      diagnosis: child?.diagnosis || '',
-      notes: child?.notes || '',
-      avatar_url: child?.avatar_url || '',
+      name: child?.name ?? '',
+      birth_date: child?.birth_date ?? '',
+      diagnosis: child?.diagnosis ?? '',
+      notes: child?.notes ?? '',
+      avatar_url: child?.avatar_url ?? '',
       emergency_contact: child?.emergency_contact || [],
       medical_info: child?.medical_info || {
         allergies: [],
@@ -635,8 +635,8 @@ export default function ChildForm({ child, mode, onSuccess, onCancel }: ChildFor
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
       
-      await uploadFile('avatars', fileName, file);
-      const url = getPublicUrl('avatars', fileName);
+      await uploadFile('AVATARS', file, fileName);
+      const url = getPublicUrl('AVATARS', fileName);
       
       form.setValue('avatar_url', url);
     } catch (error) {
@@ -867,8 +867,15 @@ export default function ChildForm({ child, mode, onSuccess, onCancel }: ChildFor
               <CardContent>
                 <EmergencyContactForm
                   contacts={form.watch('emergency_contact')}
-                  onChange={(contacts) => form.setValue('emergency_contact', contacts)}
-                />
+                  onChange={(contacts) =>
+                    form.setValue(
+                      'emergency_contact',
+                      contacts.map((c) => ({
+                        ...c,
+                        is_primary: c.is_primary ?? false
+                      }))
+                    )
+                  }                />
               </CardContent>
             </Card>
           )}
@@ -943,14 +950,12 @@ export default function ChildForm({ child, mode, onSuccess, onCancel }: ChildFor
               disabled={form.formState.isSubmitting}
             >
               <SaveIcon className="mr-2 h-4 w-4" />
-              {form.formState.isSubmitting
-                ? 'Guardando...'
-                : mode === 'create' 
-                  ? 'Crear Niño' 
-                  : 'Guardar Cambios'
-              }
-            </Button>
-          </div>
+              {(() => {
+                if (form.formState.isSubmitting) return 'Guardando...';
+                if (mode === 'create') return 'Crear Niño';
+                return 'Guardar Cambios';
+              })()}
+            </Button>          </div>
         </form>
       </Form>
     </div>
