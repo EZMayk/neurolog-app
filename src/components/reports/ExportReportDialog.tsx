@@ -85,7 +85,7 @@ export function ExportReportDialog({ open, onOpenChange, data, metrics }: Export
               <Checkbox 
                 id="charts" 
                 checked={includeCharts}
-                onCheckedChange={setIncludeCharts}
+                onCheckedChange={checked => setIncludeCharts(checked === true)}
               />
               <label htmlFor="charts" className="text-sm text-gray-700">
                 Gráficos y visualizaciones

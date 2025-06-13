@@ -46,12 +46,21 @@ DROP TABLE IF EXISTS profiles CASCADE;
 -- 2. CREAR TABLAS PRINCIPALES
 -- ================================================================
 
+
+-- ENUM para roles de usuario
+CREATE TYPE user_role AS ENUM ('parent', 'teacher', 'specialist', 'admin');
+
+-- ENUM para tipos de relación usuario-niño
+CREATE TYPE relationship_type_enum AS ENUM ('parent', 'teacher', 'specialist', 'observer', 'family');
+
+
+
 -- TABLA: profiles (usuarios del sistema)
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
-  role TEXT CHECK (role IN ('parent', 'teacher', 'specialist', 'admin')) DEFAULT 'parent',
+  role user_role DEFAULT 'parent',
   avatar_url TEXT,
   phone TEXT,
   is_active BOOLEAN DEFAULT TRUE,
@@ -101,12 +110,13 @@ CREATE TABLE children (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+
 -- TABLA: user_child_relations (relaciones usuario-niño)
 CREATE TABLE user_child_relations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   child_id UUID REFERENCES children(id) ON DELETE CASCADE NOT NULL,
-  relationship_type TEXT CHECK (relationship_type IN ('parent', 'teacher', 'specialist', 'observer', 'family')) NOT NULL,
+  relationship_type relationship_type_enum NOT NULL,
   can_edit BOOLEAN DEFAULT FALSE,
   can_view BOOLEAN DEFAULT TRUE,
   can_export BOOLEAN DEFAULT FALSE,
@@ -118,9 +128,10 @@ CREATE TABLE user_child_relations (
   notes TEXT,
   notification_preferences JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  
+
   UNIQUE(user_id, child_id, relationship_type)
 );
+
 
 -- TABLA: daily_logs (registros diarios)
 CREATE TABLE daily_logs (
