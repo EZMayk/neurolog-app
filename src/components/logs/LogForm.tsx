@@ -35,15 +35,24 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useChildren } from '@/hooks/use-children';
 import { useLogs } from '@/hooks/use-logs';
-import { supabase, uploadFile, getPublicUrl } from '@/lib/supabase';
+import { uploadFile, getPublicUrl } from '@/lib/supabase';
 import type { 
   DailyLog, 
   LogInsert, 
   LogUpdate, 
   Category, 
-  LogAttachment
 } from '@/types';
-import { ImageIcon, 
+
+
+type LogAttachment = {
+  id: string;
+  name: string;
+  url: string;
+  type: 'image' | 'video' | 'audio' | 'document';
+  size: number;
+};
+import { 
+  ImageIcon, 
   PlusIcon, 
   TrashIcon, 
   SaveIcon,
@@ -109,8 +118,8 @@ interface LogFormProps {
 }
 
 interface MoodSelectorProps {
-  readonly value?: number;
-  readonly onChange: (value: number | undefined) => void;
+  value?: number;
+  onChange: (value: number | undefined) => void;
 }
 
 interface AttachmentsManagerProps {
@@ -128,7 +137,7 @@ interface TagsInputProps {
 // COMPONENTES AUXILIARES
 // ================================================================
 
-function MoodSelector({ value, onChange }: MoodSelectorProps) {
+function MoodSelector({ value, onChange }: Readonly<MoodSelectorProps>) {
   const moods = [
     { value: 1, emoji: '😢', label: 'Muy triste', color: 'text-red-500' },
     { value: 2, emoji: '😕', label: 'Triste', color: 'text-orange-500' },
@@ -202,8 +211,13 @@ function AttachmentsManager({ attachments, onChange, childId }: Readonly<Attachm
         else if (file.type.startsWith('video/')) type = 'video';
         else if (file.type.startsWith('audio/')) type = 'audio';
         
+        
+        const array = new Uint32Array(2);
+        window.crypto.getRandomValues(array);
+        const secureId = `${Date.now()}-${array[0].toString(16)}${array[1].toString(16)}`;
+
         newAttachments.push({
-          id: `${Date.now()}-${Math.random()}`,
+          id: secureId,
           name: file.name,
           url,
           type,
@@ -361,7 +375,7 @@ function TagsInput({ tags, onChange }: Readonly<TagsInputProps>) {
           placeholder="Agregar etiqueta..."
           value={newTag}
           onChange={(e) => setNewTag(e.target.value)}
-          onKeyPress={(e) => {
+          onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
               addTag();
@@ -389,7 +403,7 @@ export default function LogForm({ log, childId, mode, onSuccess, onCancel }: Rea
   const { children } = useChildren();
   const { createLog, updateLog } = useLogs();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [ setLoadingCategories] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const router = useRouter();
 
   const form = useForm<LogFormData>({
@@ -918,18 +932,26 @@ export default function LogForm({ log, childId, mode, onSuccess, onCancel }: Rea
                 Cancelar
               </Button>
             )}
-            <Button 
-              type="submit" 
-              disabled={form.formState.isSubmitting}
-            >
-              <SaveIcon className="mr-2 h-4 w-4" />
-              {form.formState.isSubmitting
-                ? 'Guardando...'
-                : mode === 'create' 
-                  ? 'Crear Registro' 
-                  : 'Guardar Cambios'
+            {}
+            {(() => {
+              let buttonText = '';
+              if (form.formState.isSubmitting) {
+                buttonText = 'Guardando...';
+              } else if (mode === 'create') {
+                buttonText = 'Crear Registro';
+              } else {
+                buttonText = 'Guardar Cambios';
               }
-            </Button>
+              return (
+                <Button 
+                  type="submit" 
+                  disabled={form.formState.isSubmitting}
+                >
+                  <SaveIcon className="mr-2 h-4 w-4" />
+                  {buttonText}
+                </Button>
+              );
+            })()}
           </div>
         </form>
       </Form>
