@@ -5,22 +5,16 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { 
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -28,51 +22,76 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useChildren } from '@/hooks/use-children';
+import { useAuth } from '@/components/providers/AuthProvider';
 import { useLogs } from '@/hooks/use-logs';
-import type { 
-  LogWithDetails, 
-  LogFilters, 
-  IntensityLevel, 
-  ChildWithRelation 
-} from '@/types';
-import { 
-  PlusIcon, 
-  SearchIcon, 
-  FilterIcon,
+import type { LogWithDetails, IntensityLevel } from '@/types';
+
+export type UserRole = 'admin' | 'teacher' | 'specialist' | 'parent' | 'family';
+import {
   MoreVerticalIcon,
-  EditIcon,
-  EyeIcon,
-  EyeOffIcon,
-  ClockIcon,
-  TagIcon,
+  CalendarIcon,
   MapPinIcon,
   CloudIcon,
   FileIcon,
   MessageSquareIcon,
   AlertCircleIcon,
   CheckCircleIcon,
-  DownloadIcon,
-  RefreshCwIcon,
-  CalendarIcon,
-  TrendingUpIcon
+  EyeOffIcon,
+  ClockIcon,
+  ArrowLeftIcon,
+  UserIcon,
+  TagIcon,
+  ReplyIcon
 } from 'lucide-react';
-import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+export default function LogDetailPage() {
+  const { user } = useAuth();
+  // 'logs' eliminado de la desestructuración
+  const { loading, getLogById, addParentFeedback, markAsReviewed } = useLogs();
+  const params = useParams();
+  const router = useRouter();
+  const logId = params?.id as string | undefined;
 
-// ================================================================
-// COMPONENTES AUXILIARES
-// ================================================================
+  // Ensure user.role is typed correctly
+  // Assume user.role can be any UserRole (including 'parent' and 'family')
+  const userRole = user?.role as UserRole | undefined;
 
-interface LogCardProps {
-  readonly log: LogWithDetails;
-  readonly onEdit: (log: LogWithDetails) => void;
-  readonly onViewDetails: (log: LogWithDetails) => void;
-  readonly onTogglePrivacy: (log: LogWithDetails) => void;
-  readonly onAddFeedback: (log: LogWithDetails) => void;
-}
+  // Use userRole for role checks to ensure correct type narrowing
 
-function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }: LogCardProps) {
+  const [log, setLog] = useState<LogWithDetails | null>(null);
+  const [feedback, setFeedback] = useState('');
+  const [specialistNotes, setSpecialistNotes] = useState('');
+  const [isAddingFeedback, setIsAddingFeedback] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+
+  useEffect(() => {
+    if (logId && !loading) {
+      const foundLog = getLogById(logId);
+      setLog(foundLog || null);
+    }
+  }, [logId, loading, getLogById]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!log) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-xl font-semibold text-gray-900">Registro no encontrado</h2>
+        <p className="text-gray-600 mt-2">El registro que buscas no existe o no tienes permisos para verlo.</p>
+        <Button asChild className="mt-4">
+          <Link href="/dashboard/logs">Volver a registros</Link>
+        </Button>
+      </div>
+    );
+  }
+
   const getIntensityColor = (level: IntensityLevel) => {
     switch (level) {
       case 'low': return 'bg-green-100 text-green-800';
@@ -89,750 +108,407 @@ function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }:
     return '😄';
   };
 
-  const formatLogDate = (dateString: string) => {
-    const date = new Date(dateString);
-    if (isToday(date)) return 'Hoy';
-    if (isYesterday(date)) return 'Ayer';
-    return format(date, 'dd MMM', { locale: es });
+  const handleAddFeedback = async () => {
+    if (!feedback.trim()) return;
+
+    try {
+      await addParentFeedback(log.id, feedback);
+      setFeedback('');
+      setIsAddingFeedback(false);
+      // Refresh log data
+      if (logId) {
+        const updatedLog = getLogById(logId);
+        setLog(updatedLog || null);
+      }
+    } catch (error) {
+      console.error('Error adding feedback:', error);
+    }
   };
 
+  const handleMarkAsReviewed = async () => {
+    try {
+      await markAsReviewed(log.id, specialistNotes);
+      setSpecialistNotes('');
+      setIsReviewing(false);
+      // Refresh log data
+      if (logId) {
+        const updatedLog = getLogById(logId);
+        setLog(updatedLog || null);
+      }
+    } catch (error) {
+      console.error('Error marking as reviewed:', error);
+    }
+  };
+
+  const canReview = userRole === 'specialist' && !log?.reviewed_by;
+  const canAddFeedback = userRole === 'parent' || userRole === 'family';
+  let moodDescription = '';
+  if (log?.mood_score !== undefined && log?.mood_score !== null) {
+    if (log.mood_score <= 2) {
+      moodDescription = 'Necesita atención';
+    } else if (log.mood_score <= 3) {
+      moodDescription = 'Normal';
+    } else {
+      moodDescription = 'Muy positivo';
+    }
+  }
+  // -------------------------------------------------------------
+
   return (
-    <Card className="hover:shadow-lg transition-shadow duration-200 group">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          {/* Log Header */}
-          <div className="flex items-start space-x-4 flex-1">
-            <Avatar className="h-12 w-12">
-              <AvatarImage 
-                src={log.child.avatar_url ?? undefined} 
-                alt={log.child.name}
-              />
-              <AvatarFallback className="bg-blue-100 text-blue-600 text-sm font-semibold">
-                {log.child.name.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-2 mb-1">
-                <h3 className="text-lg font-semibold text-gray-900 truncate">
-                  {log.title}
-                </h3>
-                {log.is_private && (
-                  <EyeOffIcon className="h-4 w-4 text-gray-400" />
-                )}
-                {log.is_flagged && (
-                  <span title="Marcado para atención">
-                    <AlertCircleIcon className="h-4 w-4 text-red-500" aria-label="Marcado para atención" />
-                  </span>
-                )}
-              </div>
-              
-              <div className="flex items-center space-x-2 mb-2">
-                <span className="text-sm font-medium text-blue-600">
-                  {log.child.name}
-                </span>
-                <span className="text-gray-300">•</span>
-                <span className="text-sm text-gray-600">
-                  {formatLogDate(log.log_date)}
-                </span>
-                <span className="text-gray-300">•</span>
-                <span className="text-xs text-gray-500">
-                  {formatDistanceToNow(new Date(log.created_at), { 
-                    addSuffix: true, 
-                    locale: es 
-                  })}
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-2 mb-3">
-                {log.category && (
-                  <Badge 
-                    variant="secondary" 
-                    className="text-xs"
-                    style={{ 
-                      backgroundColor: `${log.category.color ?? '#000'}20`,
-                      color: log.category.color ?? '#000'
-                    }}
-                  >
-                    {log.category.name}
-                  </Badge>
-                )}
-                
-                <Badge className={`text-xs ${getIntensityColor(log.intensity_level)}`}>
-                  {log.intensity_level === 'low' && 'Bajo'}
-                  {log.intensity_level === 'medium' && 'Medio'}
-                  {log.intensity_level === 'high' && 'Alto'}
-                </Badge>
-
-                {log.mood_score && (
-                  <div className="flex items-center space-x-1">
-                    <span className="text-lg">{getMoodEmoji(log.mood_score)}</span>
-                    <span className="text-xs text-gray-600">{log.mood_score}/5</span>
-                  </div>
-                )}
-              </div>
-              
-              <p className="text-sm text-gray-600 line-clamp-2 mb-3">
-                {log.content}
-              </p>
-
-              {/* Metadata */}
-              <div className="flex items-center space-x-4 text-xs text-gray-500">
-                {log.tags.length > 0 && (
-                  <div className="flex items-center">
-                    <TagIcon className="h-3 w-3 mr-1" />
-                    <span>{log.tags.slice(0, 2).join(', ')}</span>
-                    {log.tags.length > 2 && <span> +{log.tags.length - 2}</span>}
-                  </div>
-                )}
-                
-                {log.location && (
-                  <div className="flex items-center">
-                    <MapPinIcon className="h-3 w-3 mr-1" />
-                    <span>{log.location}</span>
-                  </div>
-                )}
-                
-                {log.weather && (
-                  <div className="flex items-center">
-                    <CloudIcon className="h-3 w-3 mr-1" />
-                    <span>{log.weather}</span>
-                  </div>
-                )}
-                
-                {log.attachments.length > 0 && (
-                  <div className="flex items-center">
-                    <FileIcon className="h-3 w-3 mr-1" />
-                    <span>{log.attachments.length} archivo{log.attachments.length !== 1 ? 's' : ''}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+            <ArrowLeftIcon className="h-4 w-4 mr-2" />
+            Volver
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Registro de {log.child?.name}
+            </h1>
+            <p className="text-gray-600">
+              {format(new Date(log.created_at), "dd MMMM yyyy 'a las' HH:mm", { locale: es })}
+            </p>
           </div>
+        </div>
 
-          {/* Actions Menu */}
+        <div className="flex items-center space-x-2">
+          {/* Editar button removed because 'can_edit' does not exist on LogWithDetails */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="outline" size="sm">
                 <MoreVerticalIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => onViewDetails(log)}>
-                <EyeIcon className="mr-2 h-4 w-4" />
-                Ver Detalles
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <MessageSquareIcon className="h-4 w-4 mr-2" />
+                Agregar comentario
               </DropdownMenuItem>
-              {log.can_edit && (
-                <DropdownMenuItem onClick={() => onEdit(log)}>
-                  <EditIcon className="mr-2 h-4 w-4" />
-                  Editar
+              <DropdownMenuItem>
+                <FileIcon className="h-4 w-4 mr-2" />
+                Adjuntar archivo
+              </DropdownMenuItem>
+              {!log.reviewed_by && user?.role === 'specialist' && (
+                <DropdownMenuItem onClick={() => setIsReviewing(true)}>
+                  <CheckCircleIcon className="h-4 w-4 mr-2" />
+                  Marcar como revisado
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={() => onTogglePrivacy(log)}>
-                {log.is_private ? (
-                  <>
-                    <EyeIcon className="mr-2 h-4 w-4" />
-                    Hacer Público
-                  </>
-                ) : (
-                  <>
-                    <EyeOffIcon className="mr-2 h-4 w-4" />
-                    Hacer Privado
-                  </>
-                )}
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onAddFeedback(log)}>
-                <MessageSquareIcon className="mr-2 h-4 w-4" />
-                Agregar Comentario
+              <DropdownMenuItem className="text-red-600">
+                <AlertCircleIcon className="h-4 w-4 mr-2" />
+                Reportar problema
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
 
-        {/* Status Indicators */}
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Log Details */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-3">
+                  <div
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: typeof log.category === 'object' && log.category?.color ? log.category.color : undefined }}
+                  />
+                  <div>
+                    <CardTitle className="text-lg">
+                      {typeof log.category === 'string'
+                        ? log.category
+                        : log.category?.name ?? 'Sin categoría'}
+                    </CardTitle>
+                    <CardDescription>
+                      Registrado por {log.logged_by}
+                    </CardDescription>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {log.is_private && (
+                    <Badge variant="secondary">
+                      <EyeOffIcon className="h-3 w-3 mr-1" />
+                      Privado
+                    </Badge>
+                  )}
+                  {log.intensity_level && (
+                    <Badge className={getIntensityColor(log.intensity_level)}>
+                      {log.intensity_level === 'low' && 'Baja'}
+                      {log.intensity_level === 'medium' && 'Media'}
+                      {log.intensity_level === 'high' && 'Alta'}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              {/* Content */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Descripción</h4>
+                <p className="text-gray-700 leading-relaxed">{log.content}</p>
+              </div>
+
+              {/* Mood Score */}
+              {log.mood_score && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Estado de ánimo</h4>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-2xl">{getMoodEmoji(log.mood_score)}</span>
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">{log.mood_score}/5</p>
+                      <p className="text-sm text-gray-600">{moodDescription}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tags */}
+              {log.tags && log.tags.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Etiquetas</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Usar el valor del tag como key */}
+                    {log.tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        <TagIcon className="h-3 w-3 mr-1" />
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Context Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {log.location && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-1">Ubicación</h4>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <MapPinIcon className="h-4 w-4 mr-1" />
+                      {log.location}
+                    </div>
+                  </div>
+                )}
+
+                {log.weather && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-1">Clima</h4>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <CloudIcon className="h-4 w-4 mr-1" />
+                      {log.weather}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Follow-up */}
+              {log.follow_up_required && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <ClockIcon className="h-5 w-5 text-orange-600 mr-2" />
+                    <h4 className="text-sm font-medium text-orange-900">Seguimiento requerido</h4>
+                  </div>
+                  {log.follow_up_date && (
+                    <p className="text-sm text-orange-700 mt-1">
+                      Programado para {format(new Date(log.follow_up_date), 'dd MMMM yyyy', { locale: es })}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Review Status */}
               {log.reviewed_by ? (
-                <div className="flex items-center text-xs text-green-600">
-                  <CheckCircleIcon className="h-3 w-3 mr-1" />
-                  <span>Revisado por {log.reviewed_by}</span>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CheckCircleIcon className="h-5 w-5 text-green-600 mr-2" />
+                    <h4 className="text-sm font-medium text-green-900">Revisado por especialista</h4>
+                  </div>
+                  <p className="text-sm text-green-700 mt-1">
+                    Revisado por {log.reviewed_by} el {format(new Date(log.reviewed_at!), 'dd MMM yyyy', { locale: es })}
+                  </p>
+                  {log.specialist_notes && (
+                    <div className="mt-3">
+                      <h5 className="text-sm font-medium text-green-900">Notas del especialista:</h5>
+                      <p className="text-sm text-green-700 mt-1">{log.specialist_notes}</p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center text-xs text-orange-600">
-                  <ClockIcon className="h-3 w-3 mr-1" />
-                  <span>Pendiente de revisión</span>
+              ) : canReview && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <AlertCircleIcon className="h-5 w-5 text-blue-600 mr-2" />
+                      <h4 className="text-sm font-medium text-blue-900">Pendiente de revisión</h4>
+                    </div>
+                    <Button size="sm" onClick={() => setIsReviewing(true)}>
+                      Revisar ahora
+                    </Button>
+                  </div>
                 </div>
               )}
 
-              {/* Follow-up Status */}
-              {log.follow_up_required && (
-                <div className="flex items-center text-xs text-purple-600">
-                  <AlertCircleIcon className="h-3 w-3 mr-1" />
-                  <span>
-                    Seguimiento {log.follow_up_date ? 
-                      `programado para ${format(new Date(log.follow_up_date), 'dd MMM', { locale: es })}` : 
-                      'requerido'
-                    }
-                  </span>
+              {/* Specialist Review Form */}
+              {isReviewing && (
+                <div className="space-y-4">
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Revisión de especialista</h4>
+                    <Textarea
+                      placeholder="Agregar notas de revisión (opcional)..."
+                      value={specialistNotes}
+                      onChange={(e) => setSpecialistNotes(e.target.value)}
+                      className="mb-3"
+                    />
+                    <div className="flex space-x-2">
+                      <Button onClick={handleMarkAsReviewed}>
+                        <CheckCircleIcon className="h-4 w-4 mr-2" />
+                        Marcar como revisado
+                      </Button>
+                      <Button variant="outline" onClick={() => setIsReviewing(false)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Logged by */}
-            <div className="text-xs text-gray-500">
-            </div>
-          </div>
-
-          {/* Feedback Preview */}
-          {(log.specialist_notes || log.parent_feedback) && (
-            <div className="mt-2 space-y-1">
-              {log.specialist_notes && (
-                <div className="text-xs text-purple-600 bg-purple-50 p-2 rounded">
-                  <strong>Nota del especialista:</strong> {log.specialist_notes.slice(0, 100)}
-                  {log.specialist_notes.length > 100 && '...'}
-                </div>
-              )}
+              {/* Parent Feedback */}
               {log.parent_feedback && (
-                <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                  <strong>Comentario de padres:</strong> {log.parent_feedback.slice(0, 100)}
-                  {log.parent_feedback.length > 100 && '...'}
+                <div>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Comentarios de padres</h4>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-700">{log.parent_feedback}</p>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-          )}
+
+              {/* Add Feedback Form */}
+              {canAddFeedback && !log.parent_feedback && (
+                <div>
+                  <Separator />
+                  {isAddingFeedback ? (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-gray-900">Agregar comentario</h4>
+                      <Textarea
+                        placeholder="Comparte tu perspectiva sobre este registro..."
+                        value={feedback}
+                        onChange={(e) => setFeedback(e.target.value)}
+                      />
+                      <div className="flex space-x-2">
+                        <Button onClick={handleAddFeedback} disabled={!feedback.trim()}>
+                          <ReplyIcon className="h-4 w-4 mr-2" />
+                          Enviar comentario
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsAddingFeedback(false)}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button variant="outline" onClick={() => setIsAddingFeedback(true)}>
+                      <MessageSquareIcon className="h-4 w-4 mr-2" />
+                      Agregar comentario
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mt-4 flex space-x-2">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            className="flex-1"
-            onClick={() => onViewDetails(log)}
-          >
-            <EyeIcon className="mr-2 h-4 w-4" />
-            Ver Completo
-          </Button>
-          {log.can_edit && (
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => onEdit(log)}
-            >
-              <EditIcon className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface FiltersBarProps {
-  filters: LogFilters;
-  onFiltersChange: (filters: LogFilters) => void;
-  children: ChildWithRelation[];
-  totalCount: number;
-  filteredCount: number;
-}
-
-function FiltersBar({ filters, onFiltersChange, children, totalCount, filteredCount }: Readonly<FiltersBarProps>) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center">
-              <FilterIcon className="mr-2 h-5 w-5" />
-              Filtros de Búsqueda
-            </CardTitle>
-            <CardDescription>
-              Mostrando {filteredCount} de {totalCount} registros
-            </CardDescription>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => onFiltersChange({})}
-          >
-            Limpiar Filtros
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          {/* Search */}
-          <div className="md:col-span-2 relative">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Buscar en título y contenido..."
-              value={filters.search_term ?? ''}
-              onChange={(e) => onFiltersChange({ ...filters, search_term: e.target.value })}
-              className="pl-10"
-            />
-          </div>
-
-          {/* Child Filter */}
-          <Select 
-            value={filters.child_id ?? 'all'} 
-            onValueChange={(value) => onFiltersChange({ 
-              ...filters, 
-              child_id: value === 'all' ? undefined : value 
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todos los niños" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los niños</SelectItem>
-              {children.map((child) => (
-                <SelectItem key={child.id} value={child.id}>
-                  {child.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Date Range */}
-          <Input
-            type="date"
-            placeholder="Desde"
-            value={filters.date_from ?? ''}
-            onChange={(e) => onFiltersChange({ ...filters, date_from: e.target.value })}
-          />
-
-          <Input
-            type="date"
-            placeholder="Hasta"
-            value={filters.date_to ?? ''}
-            onChange={(e) => onFiltersChange({ ...filters, date_to: e.target.value })}
-          />
-
-          {/* Review Status */}
-          <Select 
-            value={filters.reviewed_status ?? 'all'} 
-            onValueChange={(value) => onFiltersChange({ 
-              ...filters, 
-              reviewed_status: value === 'all' ? undefined : value as 'reviewed' | 'pending'
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Estado de revisión" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="reviewed">Revisados</SelectItem>
-              <SelectItem value="pending">Pendientes</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Additional Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Intensity Level */}
-          <Select 
-            value={filters.intensity_level ?? 'all'} 
-            onValueChange={(value) => onFiltersChange({ 
-              ...filters, 
-              intensity_level: value === 'all' ? undefined : value as IntensityLevel
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Intensidad" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las intensidades</SelectItem>
-              <SelectItem value="low">Baja</SelectItem>
-              <SelectItem value="medium">Media</SelectItem>
-              <SelectItem value="high">Alta</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Mood Score Range */}
-          <div className="flex space-x-2">
-            <Input
-              type="number"
-              placeholder="Humor mín"
-              min="1"
-              max="5"
-              value={filters.mood_score_min ?? ''}
-              onChange={(e) => onFiltersChange({ 
-                ...filters, 
-                mood_score_min: e.target.value ? parseInt(e.target.value) : undefined 
-              })}
-            />
-            <Input
-              type="number"
-              placeholder="Humor máx"
-              min="1"
-              max="5"
-              value={filters.mood_score_max ?? ''}
-              onChange={(e) => onFiltersChange({ 
-                ...filters, 
-                mood_score_max: e.target.value ? parseInt(e.target.value) : undefined 
-              })}
-            />
-          </div>
-
-          {/* Privacy Filter */}
-          <Select 
-            value={filters.is_private === undefined ? 'all' : filters.is_private.toString()} 
-            onValueChange={(value) => onFiltersChange({ 
-              ...filters, 
-              is_private: value === 'all' ? undefined : value === 'true' 
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Privacidad" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="false">Públicos</SelectItem>
-              <SelectItem value="true">Privados</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Follow-up Status */}
-          <Select 
-            value={filters.follow_up_status ?? 'all'} 
-            onValueChange={(value) => onFiltersChange({ 
-              ...filters, 
-              follow_up_status: value === 'all' ? undefined : value as 'required' | 'completed'
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Seguimiento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="required">Con seguimiento</SelectItem>
-              <SelectItem value="completed">Sin seguimiento</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ================================================================
-// COMPONENTE PRINCIPAL
-// ================================================================
-
-export default function LogsPage() {
-  const { children } = useChildren({ includeInactive: false });
-  const { 
-    logs, 
-    stats, 
-    loading, 
-    error, 
-    hasMore,
-    filterLogs,
-    loadMore,
-    refreshLogs,
-    togglePrivacy
-  } = useLogs({ 
-    includePrivate: true,
-    realtime: true,
-    pageSize: 20 
-  });
-
-  const searchParams = useSearchParams();
-  const [filters, setFilters] = useState<LogFilters>({
-    child_id: searchParams.get('child_id') ?? undefined,
-    category_id: searchParams.get('category_id') ?? undefined,
-  });
-
-  // Aplicar filtros
-  const filteredLogs = useMemo(() => {
-    return filterLogs(filters);
-  }, [logs, filters, filterLogs]);
-
-  // Handlers
-  const handleEdit = (log: LogWithDetails) => {
-    window.location.href = `/dashboard/logs/${log.id}/edit`;
-  };
-
-  const handleViewDetails = (log: LogWithDetails) => {
-    window.location.href = `/dashboard/logs/${log.id}`;
-  };
-
-  const handleTogglePrivacy = async (log: LogWithDetails) => {
-    try {
-      await togglePrivacy(log.id);
-    } catch (error) {
-      console.error('Error toggling privacy:', error);
-    }
-  };
-
-  const handleAddFeedback = (log: LogWithDetails) => {
-    window.location.href = `/dashboard/logs/${log.id}?action=feedback`;
-  };
-
-  if (loading) {
-    return (
-      <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-2" />
-            <div className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-        </div>
-        
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => {
-            const uniqueKey = `skeleton-card-${i}-${Math.random().toString(36).slice(2, 11)}`;
-            return (
-              <Card key={uniqueKey} className="p-6">
-                <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-gray-200 rounded-full animate-pulse" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-                    <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-                    <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Metadata */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Información del registro</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Niño</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={log.child?.avatar_url ?? undefined} />
+                      <AvatarFallback className="text-xs">
+                        {log.child?.name?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="text-sm font-medium text-gray-900">{log.child?.name}</p>
                   </div>
                 </div>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
 
-  if (error) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-red-600">Error al cargar registros</CardTitle>
-            <CardDescription>{error}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              onClick={() => refreshLogs()} 
-              className="w-full"
-            >
-              <RefreshCwIcon className="mr-2 h-4 w-4" />
-              Reintentar
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Registrado por</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Avatar className="h-6 w-6">
+                      {/* Si tienes un campo válido para el avatar del usuario que registró, reemplázalo aquí. Si no, solo muestra el fallback */}
+                      <AvatarFallback className="text-xs">
+                        {log.logged_by?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="text-sm font-medium text-gray-900">{log.logged_by}</p>
+                  </div>
+                </div>
 
-  return (
-    <div className="flex-1 space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Registros Diarios
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Historial completo de observaciones y eventos documentados
-          </p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" onClick={() => refreshLogs()}>
-            <RefreshCwIcon className="mr-2 h-4 w-4" />
-            Actualizar
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/logs/export">
-              <DownloadIcon className="mr-2 h-4 w-4" />
-              Exportar
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link href="/dashboard/logs/new">
-              <PlusIcon className="mr-2 h-4 w-4" />
-              Nuevo Registro
-            </Link>
-          </Button>
-        </div>
-      </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha y hora</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <CalendarIcon className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-gray-900">
+                      {format(new Date(log.created_at), 'dd MMM yyyy, HH:mm', { locale: es })}
+                    </p>
+                  </div>
+                </div>
 
-      {/* Stats Summary */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Registros</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total_logs}</p>
+                {log.updated_at !== log.created_at && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Última modificación</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {format(new Date(log.updated_at), 'dd MMM yyyy, HH:mm', { locale: es })}
+                    </p>
+                  </div>
+                )}
               </div>
-              <TrendingUpIcon className="h-8 w-8 text-blue-600 ml-auto" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Esta Semana</p>
-                <p className="text-2xl font-bold text-green-600">{stats.logs_this_week}</p>
-              </div>
-              <CalendarIcon className="h-8 w-8 text-green-600 ml-auto" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Pendientes</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.pending_reviews}</p>
-              </div>
-              <ClockIcon className="h-8 w-8 text-orange-600 ml-auto" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Seguimientos</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.follow_ups_due}</p>
-              </div>
-              <AlertCircleIcon className="h-8 w-8 text-purple-600 ml-auto" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <FiltersBar
-        filters={filters}
-        onFiltersChange={setFilters}
-        totalCount={logs.length}
-        filteredCount={filteredLogs.length}
-      >
-        {children}
-      </FiltersBar>
-
-      {/* Results */}
-      {filteredLogs.length === 0 ? (
-        <Card>
-          <CardContent className="text-center py-12">
-            <FileIcon className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-            {logs.length === 0 ? (
-              <>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No hay registros todavía
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Comienza documentando el primer evento o actividad importante
-                </p>
-                <Button asChild>
-                  <Link href="/dashboard/logs/new">
-                    <PlusIcon className="mr-2 h-4 w-4" />
-                    Crear Primer Registro
-                  </Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No se encontraron registros
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  No hay registros que coincidan con los filtros seleccionados
-                </p>
-                <Button 
-                  variant="outline"
-                  onClick={() => setFilters({})}
-                >
-                  Limpiar Filtros
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          {/* Logs List */}
-          <div className="space-y-4">
-            {filteredLogs.map((log) => (
-              <LogCard
-                key={log.id}
-                log={log}
-                onEdit={handleEdit}
-                onViewDetails={handleViewDetails}
-                onTogglePrivacy={handleTogglePrivacy}
-                onAddFeedback={handleAddFeedback}
-              />
-            ))}
-          </div>
-
-          {/* Load More */}
-          {hasMore && (
-            <div className="text-center">
-              <Button 
-                variant="outline" 
-                onClick={loadMore}
-                className="min-w-[200px]"
-              >
-                Cargar Más Registros
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Acciones</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="outline" size="sm" className="w-full justify-start" asChild>
+                <Link href={`/dashboard/children/${log.child_id}`}>
+                  <UserIcon className="h-4 w-4 mr-2" />
+                  Ver perfil del niño
+                </Link>
               </Button>
-            </div>
-          )}
-
-          {/* Summary */}
-          {filteredLogs.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Resumen de Filtros</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-                  <div>
-                    <div className="text-xl font-bold text-blue-600">
-                      {filteredLogs.length}
-                    </div>
-                    <div className="text-sm text-gray-600">Registros</div>
-                  </div>
-                  <div>
-                    <div className="text-xl font-bold text-green-600">
-                      {filteredLogs.filter(l => l.reviewed_by).length}
-                    </div>
-                    <div className="text-sm text-gray-600">Revisados</div>
-                  </div>
-                  <div>
-                    <div className="text-xl font-bold text-purple-600">
-                      {filteredLogs.filter(l => l.is_private).length}
-                    </div>
-                    <div className="text-sm text-gray-600">Privados</div>
-                  </div>
-                  <div>
-                    <div className="text-xl font-bold text-orange-600">
-                      {filteredLogs.filter(l => l.follow_up_required).length}
-                    </div>
-                    <div className="text-sm text-gray-600">C/ Seguimiento</div>
-                  </div>
-                  <div>
-                    <div className="text-xl font-bold text-red-600">
-                      {filteredLogs.filter(l => l.intensity_level === 'high').length}
-                    </div>
-                    <div className="text-sm text-gray-600">Alta Intensidad</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
+              <Button variant="outline" size="sm" className="w-full justify-start">
+                <CalendarIcon className="h-4 w-4 mr-2" />
+                Programar seguimiento
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start">
+                <FileIcon className="h-4 w-4 mr-2" />
+                Descargar PDF
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
