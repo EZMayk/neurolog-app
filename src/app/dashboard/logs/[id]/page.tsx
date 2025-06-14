@@ -104,11 +104,11 @@ function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }:
           <div className="flex items-start space-x-4 flex-1">
             <Avatar className="h-12 w-12">
               <AvatarImage 
-                src={log.child_avatar_url} 
-                alt={log.child_name}
+                src={log.child.avatar_url ?? undefined} 
+                alt={log.child.name}
               />
               <AvatarFallback className="bg-blue-100 text-blue-600 text-sm font-semibold">
-                {log.child_name.charAt(0).toUpperCase()}
+                {log.child.name.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             
@@ -118,16 +118,18 @@ function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }:
                   {log.title}
                 </h3>
                 {log.is_private && (
-                  <EyeOffIcon className="h-4 w-4 text-gray-400" title="Registro privado" />
+                  <EyeOffIcon className="h-4 w-4 text-gray-400" />
                 )}
                 {log.is_flagged && (
-                  <AlertCircleIcon className="h-4 w-4 text-red-500" title="Marcado para atención" />
+                  <span title="Marcado para atención">
+                    <AlertCircleIcon className="h-4 w-4 text-red-500" aria-label="Marcado para atención" />
+                  </span>
                 )}
               </div>
               
               <div className="flex items-center space-x-2 mb-2">
                 <span className="text-sm font-medium text-blue-600">
-                  {log.child_name}
+                  {log.child.name}
                 </span>
                 <span className="text-gray-300">•</span>
                 <span className="text-sm text-gray-600">
@@ -143,16 +145,16 @@ function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }:
               </div>
 
               <div className="flex items-center space-x-2 mb-3">
-                {log.category_name && (
+                {log.category && (
                   <Badge 
                     variant="secondary" 
                     className="text-xs"
                     style={{ 
-                      backgroundColor: `${log.category_color}20`,
-                      color: log.category_color 
+                      backgroundColor: `${log.category.color ?? '#000'}20`,
+                      color: log.category.color ?? '#000'
                     }}
                   >
-                    {log.category_name}
+                    {log.category.name}
                   </Badge>
                 )}
                 
@@ -257,7 +259,7 @@ function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }:
               {log.reviewed_by ? (
                 <div className="flex items-center text-xs text-green-600">
                   <CheckCircleIcon className="h-3 w-3 mr-1" />
-                  <span>Revisado por {log.reviewer_name}</span>
+                  <span>Revisado por {log.reviewed_by}</span>
                 </div>
               ) : (
                 <div className="flex items-center text-xs text-orange-600">
@@ -282,7 +284,6 @@ function LogCard({ log, onEdit, onViewDetails, onTogglePrivacy, onAddFeedback }:
 
             {/* Logged by */}
             <div className="text-xs text-gray-500">
-              por {log.logged_by_name}
             </div>
           </div>
 
@@ -417,7 +418,7 @@ function FiltersBar({ filters, onFiltersChange, children, totalCount, filteredCo
             value={filters.reviewed_status ?? 'all'} 
             onValueChange={(value) => onFiltersChange({ 
               ...filters, 
-              reviewed_status: value === 'all' ? undefined : value
+              reviewed_status: value === 'all' ? undefined : value as 'reviewed' | 'pending'
             })}
           >
             <SelectTrigger>
@@ -501,7 +502,7 @@ function FiltersBar({ filters, onFiltersChange, children, totalCount, filteredCo
             value={filters.follow_up_status ?? 'all'} 
             onValueChange={(value) => onFiltersChange({ 
               ...filters, 
-              follow_up_status: value === 'all' ? undefined : value
+              follow_up_status: value === 'all' ? undefined : value as 'required' | 'completed'
             })}
           >
             <SelectTrigger>

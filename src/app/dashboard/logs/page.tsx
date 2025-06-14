@@ -718,10 +718,11 @@ export default function LogsPage() {
       <FiltersBar
         filters={filters}
         onFiltersChange={setFilters}
-        children={children}
         totalCount={logs.length}
         filteredCount={filteredLogs.length}
-      />
+      >
+        {children}
+      </FiltersBar>
 
       {/* Results */}
       {filteredLogs.length === 0 ? (
