@@ -311,7 +311,7 @@ BEGIN
   );
 EXCEPTION
   WHEN OTHERS THEN
-    NULL; -- No fallar por errores de auditoría
+    DBMS_OUTPUT.PUT_LINE('Error: No fallar por errores de auditoría');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
