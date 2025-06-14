@@ -35,17 +35,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useChildren } from '@/hooks/use-children';
 import { useLogs } from '@/hooks/use-logs';
-import { supabase, uploadFile, getPublicUrl} from '@/lib/supabase';
+import { supabase, uploadFile, getPublicUrl } from '@/lib/supabase';
 import type { 
   DailyLog, 
   LogInsert, 
   LogUpdate, 
   Category, 
-  LogAttachment,
-
+  LogAttachment
 } from '@/types';
-import { 
-  ImageIcon, 
+import { ImageIcon, 
   PlusIcon, 
   TrashIcon, 
   SaveIcon,
@@ -183,9 +181,11 @@ function MoodSelector({ value, onChange }: MoodSelectorProps) {
 
 function AttachmentsManager({ attachments, onChange, childId }: Readonly<AttachmentsManagerProps>) {
   const [uploading, setUploading] = useState(false);
+  const { user } = useAuth();
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) return;
+    if (!files || !user) return;
 
     try {
       setUploading(true);
@@ -193,15 +193,15 @@ function AttachmentsManager({ attachments, onChange, childId }: Readonly<Attachm
 
       for (const file of Array.from(files)) {
         const fileName = `${childId}/${Date.now()}-${file.name}`;
-
+        
         await uploadFile('ATTACHMENTS', file, fileName);
         const url = getPublicUrl('ATTACHMENTS', fileName);
-
+        
         let type: LogAttachment['type'] = 'document';
         if (file.type.startsWith('image/')) type = 'image';
         else if (file.type.startsWith('video/')) type = 'video';
         else if (file.type.startsWith('audio/')) type = 'audio';
-
+        
         newAttachments.push({
           id: `${Date.now()}-${Math.random()}`,
           name: file.name,
@@ -386,29 +386,29 @@ function TagsInput({ tags, onChange }: Readonly<TagsInputProps>) {
 // ================================================================
 
 export default function LogForm({ log, childId, mode, onSuccess, onCancel }: Readonly<LogFormProps>) {
-  useAuth();
   const { children } = useChildren();
   const { createLog, updateLog } = useLogs();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [ setLoadingCategories] = useState(true);
   const router = useRouter();
 
   const form = useForm<LogFormData>({
     resolver: zodResolver(logFormSchema),
     defaultValues: {
-      child_id: (log?.child_id ?? childId) ?? '',
+      child_id: log?.child_id ?? childId ?? '',
       category_id: log?.category_id ?? '',
       title: log?.title ?? '',
       content: log?.content ?? '',
       mood_score: log?.mood_score ?? undefined,
       intensity_level: log?.intensity_level ?? 'medium',
       log_date: log?.log_date ?? format(new Date(), 'yyyy-MM-dd'),
-      is_private: log?.is_private || false,
-      tags: log?.tags || [],
+      is_private: log?.is_private ?? false,
+      tags: log?.tags ?? [],
       location: log?.location ?? '',
       weather: log?.weather ?? '',
-      follow_up_required: log?.follow_up_required || false,
+      follow_up_required: log?.follow_up_required ?? false,
       follow_up_date: log?.follow_up_date ?? '',
-      attachments: log?.attachments || []
+      attachments: log?.attachments ?? []
     }
   });
 
@@ -426,11 +426,14 @@ export default function LogForm({ log, childId, mode, onSuccess, onCancel }: Rea
         setCategories(data ?? []);
       } catch (error) {
         console.error('Error fetching categories:', error);
+      } finally {
+        setLoadingCategories(false);
       }
     }
 
     fetchCategories();
   }, []);
+
   const onSubmit = async (data: LogFormData) => {
     try {
       let result: DailyLog;
